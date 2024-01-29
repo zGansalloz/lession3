@@ -1,0 +1,38 @@
+---
+- name: Добавляем репозитарий Nginx
+  become: true
+  become_method: sudo
+
+  apt_repository:
+    repo: ppa:ondrej/nginx
+
+- name: Устанавливаем Nginx для WordPress
+  apt:
+    name: nginx
+    state: present
+    force: yes
+    update_cache: yes
+
+- name: Замена конфига Nginx-WordPress
+  template: "src=../templates/default dest=/etc/nginx/sites-available/default owner=ubuntu group=ubuntu mode=0644"
+
+- name: Создаём Symlink
+  file:
+    src: /etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-enabled/default
+    state: link
+  notify: Symlink default site
+
+- name: Назначаем пользователя для Nginx-WordPress
+  lineinfile:
+    dest: /etc/nginx/nginx.conf
+    regexp: "^user"
+    line: "user {{ username }};"
+    state: present
+  notify: restart nginx
+
+- name: Запускаем Nginx-WordPress
+    # become: yes
+  service:
+    name: nginx
+    state: restarted

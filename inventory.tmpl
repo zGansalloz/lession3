@@ -1,0 +1,18 @@
+[proxy]
+%{ for index, group in ansible_group_proxy ~}
+${ hostname_proxy[index]} ansible_ssh_host=${ip_address_proxy} ansible_ssh_private_key_file=${private_key_proxy} ansible_ssh_user=${user_proxy}
+%{ endfor ~}
+
+%{ for shard_index in number_of_shards ~}
+[website${shard_index}]
+%{ for index, group in ansible_group_website ~}
+${ group == tostring(shard_index) && ansible_group_index[index] == "0" ? join(" ansible_ssh_host=${ip_address_website[index]} ansible_ssh_private_key_file=${private_key_website} ansible_ssh_user=${user_website} " , [ hostname_website[index], "website=MAIN" ] ) : "\n" ~}
+${ group == tostring(shard_index) && ansible_group_index[index] != "0" ? join(" ansible_ssh_host=${ip_address_website[index]} ansible_ssh_private_key_file=${private_key_website} ansible_ssh_user=${user_website} " , [ hostname_website[index], "website=MIRROR" ]) : "\n" ~}
+%{ endfor ~}
+
+%{ endfor ~}
+
+[database]
+%{ for index, group in ansible_group_database ~}
+${hostname_database[index]} ansible_ssh_host=${ip_address_database} ansible_ssh_private_key_file=${private_key_database} ansible_ssh_user=${user_database}
+%{ endfor ~}

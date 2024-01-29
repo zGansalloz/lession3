@@ -1,0 +1,42 @@
+---
+    - name: Скачиваем и распаковываем последюю версию WordPress
+      unarchive:
+        src: https://wordpress.org/latest.tar.gz
+        dest: "/var/www/html"
+        remote_src: yes
+        creates: "/var/www/html/wordpress"
+
+    - name: Назначаем владельца
+      file:
+        path: "/var/www/html"
+        state: directory
+        recurse: yes
+        owner: "{{ username }}"
+        group: "{{ username }}"
+
+    - name: Установка прав на директории
+      shell: "/usr/bin/find /var/www/html/wordpress/ -type d -exec chmod 750 {} \\;"
+
+    - name: Установка прав на файлы
+      shell: "/usr/bin/find /var/www/html/wordpress/ -type f -exec chmod 640 {} \\;"
+
+    - name: Изменяем файл конфигурации WordPress
+      command: mv /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php creates=/var/www/html/wordpress/wp-config.php
+      become: yes
+
+    - name: Прописываем авторизацинные данные для базы в файл wp-config
+      lineinfile:
+        path: "/var/www/html/wordpress/wp-config.php"
+        regexp: "{{item.regexp}}"
+        line: "{{item.line}}"
+      with_items:
+        - {'regexp': "define\\( 'DB_NAME', '(.)+' \\);", 'line': "define( 'DB_NAME', '{{wp_db}}' );"}
+        - {'regexp': "define\\( 'DB_USER', '(.)+' \\);", 'line': "define( 'DB_USER', '{{wp_user}}' );"}
+        - {'regexp': "define\\( 'DB_PASSWORD', '(.)+' \\);", 'line': "define( 'DB_PASSWORD', '{{wp_password}}' );"}
+        - {'regexp': "define\\( 'DB_HOST', '(.)+' \\);", 'line': "define( 'DB_HOST', '{{mysql_hosts}}' );"}
+
+    - name: Перезапуск Nginx-WordPress
+      become: yes
+      service:
+        name: nginx
+        state: restarted

@@ -1,0 +1,112 @@
+---
+- name: Устанавливаем дополнительное программное обеспечение
+  apt:
+    name:
+      - "curl"
+      - "apt-transport-https"
+      - "software-properties-common"
+      - "python3-pip"
+    state: present
+    force: yes
+    update_cache: yes
+
+- name: Убедитесь, что pymysql присутствует
+  pip:
+    name: pymysql
+    state: present
+
+- name: Создаём каталог для ключа с репозитория
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+
+- name: Скачиваем последний ключ и распологаем его в /etc/apt/keyrings. "Я за**ался решать проблему с ключом, но я победил!"
+  become: yes
+  get_url:
+    url: https://mariadb.org/mariadb_release_signing_key.pgp
+    dest: /etc/apt/keyrings/mariadb-keyring.pgp
+
+- name: Загружаем настройки для репозитория MariaDB
+  template: "src=../templates/mariadb.sources dest=/etc/apt/sources.list.d/mariadb.sources mode=0644"
+
+- name: Обновляем установленные репозитории
+  apt: update_cache=yes
+  ignore_errors: yes
+
+- name: Установка MariaDB Server 10.11
+  apt: name=mariadb-server state=latest
+
+- name: Установка MariaDB Client 10.11
+  apt: name=mariadb-client state=latest
+
+- name: Установка MariaDB Common 10.11
+  apt: name=mariadb-common state=latest
+
+- name: Перезапуск MariaDB 10.11
+  service: name=mariadb state=restarted
+
+- name: "Генерируем пароль для пользователя root"
+  set_fact:
+    mysql_root_password: "{{ lookup('password','/dev/null chars=ascii_letters,digits length=32') }}"
+
+- name: "Устанавливаем ранее сгенерированный пароль для root"
+  become: yes
+  mysql_user:
+    name: root
+    password: "{{ mysql_root_password }}"
+    check_implicit_admin: true
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: "Обновдяем данный для пользователя root .my.cnf"
+  become: yes
+  ini_file:
+    dest: "/root/.my.cnf"
+    section: client
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    mode: 0600
+  with_items:
+    - { option: user, value: root }
+    - { option: password, value: "{{ mysql_root_password }}" }
+  when: mysql_root_password
+
+- name: Remove the MySQL test database
+  mysql_db:
+    name: test
+    state: absent
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Creates database for WordPress
+  mysql_db:
+    name: "{{ wp_db }}"
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Create MySQL user for WordPress
+  mysql_user:
+    name: "{{ wp_user }}"
+    password: "{{ wp_password }}"
+    host: '%'
+    priv: "{{ wp_db }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Комментируем bind-address, разрешаем доступ с удаленного подключения.
+  lineinfile:
+    path: "/etc/mysql/mariadb.conf.d/50-server.cnf"
+    regexp: '^bind-address'
+    insertbefore: BOF
+    line: '#bind-address'
+
+- name: Разрешаем доступ с нашей подсетки
+  ufw:
+    rule: allow
+    src: '{{ item }}'
+  with_items:
+    - 10.0.10.0/24
+
+- name: Перезапуск MariaDB 10.11
+  service: name=mariadb state=restarted

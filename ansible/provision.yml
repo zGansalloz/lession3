@@ -1,0 +1,29 @@
+---
+- name: Install Nginx Proxy
+  hosts: proxy
+  become: true
+  become_method: sudo
+  vars_files:
+    - secrets.yml
+  roles:
+   - nginx-proxy
+
+- name: Install Nginx WeB
+  hosts: website0
+  become: true
+  become_method: sudo
+  vars_files:
+    - secrets.yml
+  roles:
+   - nginx-web
+   - php
+   - wordpress
+
+- name: Install Mariadb
+  hosts: database
+  become: true
+  become_method: sudo
+  vars_files:
+    - secrets.yml
+  roles:
+   - mariadb
